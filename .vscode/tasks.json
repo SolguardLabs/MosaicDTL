@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "MosaicDTL: build",
+      "type": "shell",
+      "command": "npm run build",
+      "group": "build"
+    },
+    {
+      "label": "MosaicDTL: test",
+      "type": "shell",
+      "command": "npm test",
+      "group": "test"
+    }
+  ]
+}

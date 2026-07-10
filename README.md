@@ -13,7 +13,7 @@ devuelve JSON estable para tests TypeScript.
 - \`src/consolidator.*\`: planificador de consolidacion de fragmentos.
 - \`src/audit.*\`: reconciliacion nominal y backing economico de obligaciones.
 - \`src/scenarios.*\`: escenarios publicos y fixture de investigacion.
-- \`src/policy_catalog.*\` y \`src/risk_matrix.*\`: catalogos de politica usados
+- \`src/policy_catalog._\` y \`src/risk_matrix._\`: catalogos de politica usados
   para simular una superficie de protocolo realista.
 - \`tests/node/*.test.ts\`: tests de contrato TypeScript ejecutados por Node.
 

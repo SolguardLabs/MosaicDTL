@@ -1,0 +1,22 @@
+{
+  "name": "mosaic-dtl",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MosaicDTL C++ liquidity-fragmentation CTF with TypeScript contract tests.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:all": "node scripts/check-js.mjs && node scripts/run-tests.mjs",
+    "ci": "node scripts/check-js.mjs && node scripts/run-tests.mjs",
+    "generate": "node scripts/generate-project.mjs",
+    "fmt": "prettier --write --config .prettierrc --ignore-path .prettierignore \"**/*.{js,mjs,ts,json,md,yml,yaml}\"",
+    "fmt:check": "prettier --check --config .prettierrc --ignore-path .prettierignore \"**/*.{js,mjs,ts,json,md,yml,yaml}\""
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3"
+  }
+}
