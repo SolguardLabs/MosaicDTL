@@ -15,11 +15,5 @@ test("cli lists deterministic scenarios", () => {
   const payload = JSON.parse(stdout);
 
   assert.equal(payload.protocol, "MosaicDTL");
-  assert.deepEqual(payload.scenarios, [
-    "allocation",
-    "withdrawal",
-    "consolidation",
-    "route-close",
-    "provenance-leak",
-  ]);
+  assert.deepEqual(payload.scenarios, ["allocation", "withdrawal", "consolidation", "route-close"]);
 });

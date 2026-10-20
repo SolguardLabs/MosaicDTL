@@ -12,6 +12,11 @@
       "type": "shell",
       "command": "npm test",
       "group": "test"
+    },
+    {
+      "label": "MosaicDTL: CI",
+      "type": "shell",
+      "command": "bash scripts/ci.sh"
     }
   ]
 }
