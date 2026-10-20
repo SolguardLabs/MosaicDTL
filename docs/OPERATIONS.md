@@ -25,6 +25,8 @@ flowchart LR
 
 Antes de publicar un cambio económico, compare el comportamiento de depósitos, reservas, asignaciones, consolidaciones, retiradas y cierres de ruta. Revise los recibos junto al historial de fragmentos y compruebe que los consumidores JSON aceptan campos nuevos. Un cambio de formato o semántica que rompa consumidores exige versión mayor.
 
+El flujo `release-integrity` vuelve a ejecutar CI cuando se publica el tag y el release. También exige que `main`, `production` y el tag anotado resuelvan al mismo commit.
+
 ## Diagnóstico
 
 - Si falla la compilación, verifique `CXX`, la versión C++17 y la salida del compilador; no confunda un error de toolchain con un fallo contable.
