@@ -1,5 +1,4 @@
 build/
 .test-build/
 node_modules/
-vulnerability.md
 npm-debug.log*

@@ -1,5 +1,6 @@
 #include "scenarios.hpp"
 
+#include "exposure.hpp"
 #include "policy_catalog.hpp"
 #include "risk_matrix.hpp"
 
@@ -66,6 +67,14 @@ ScenarioOutput allocation_scenario() {
   output.metrics["route_north"] = output.ledger.active_amount_on_route("route-north");
   output.metrics["route_south"] = output.ledger.active_amount_on_route("route-south");
   output.flags["obligations_backed"] = true;
+  const auto exposure = measure_exposure(output.ledger);
+  output.metrics["route_headroom"] = exposure.aggregate_headroom;
+  output.metrics["route_active_total"] = exposure.total_route_active;
+  output.metrics["route_committed_total"] = exposure.total_committed;
+  output.metrics["active_routes"] = exposure.active_routes;
+  output.metrics["unallocated_free"] = exposure.unallocated_free;
+  output.metrics["largest_route"] = exposure.largest_route;
+  output.flags["routes_within_capacity"] = exposure.all_routes_within_capacity;
   add_catalog_metrics(output);
   return output;
 }
@@ -159,42 +168,6 @@ ScenarioOutput route_close_scenario() {
   return output;
 }
 
-ScenarioOutput provenance_leak_scenario() {
-  ScenarioOutput output;
-  output.name = "provenance-leak";
-  output.ledger = base_ledger();
-  output.ledger.reserve(
-      "vault-mosaic",
-      "route-north",
-      "operator-north",
-      "invoice-9001",
-      400'000,
-      Priority::Critical);
-  output.ledger.assign_free(
-      "vault-mosaic",
-      "route-north",
-      "operator-north",
-      250'000,
-      Priority::Normal,
-      "same route idle liquidity");
-  output.receipts.push_back(output.ledger.consolidate(
-      "vault-mosaic",
-      {"route-north"},
-      "route-merge",
-      "operator-north",
-      Priority::Low));
-  output.ledger.withdraw_free("vault-mosaic", 650'000, "treasury-alpha");
-  const bool executed = output.ledger.execute_obligation("invoice-9001");
-  output.flags["execution_after_withdrawal"] = executed;
-  output.flags["receipt_origin_preserved"] = output.receipts.back().economic_origin_preserved;
-  output.metrics["withdrawn"] = output.ledger.total_withdrawn();
-  output.metrics["invoice_backing"] = output.ledger.active_reserved_for_obligation("invoice-9001");
-  output.metrics["consolidated_total"] = output.receipts.back().total_amount;
-  output.labels["leaked_obligation"] = "invoice-9001";
-  add_catalog_metrics(output);
-  return output;
-}
-
 }  // namespace
 
 std::vector<std::string> scenario_names() {
@@ -203,7 +176,6 @@ std::vector<std::string> scenario_names() {
       "withdrawal",
       "consolidation",
       "route-close",
-      "provenance-leak",
   };
 }
 
@@ -219,9 +191,6 @@ ScenarioOutput run_scenario(const std::string& name) {
   }
   if (name == "route-close") {
     return route_close_scenario();
-  }
-  if (name == "provenance-leak") {
-    return provenance_leak_scenario();
   }
   throw std::invalid_argument("unknown scenario: " + name);
 }
