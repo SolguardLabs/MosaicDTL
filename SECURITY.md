@@ -1,5 +1,12 @@
 # Política de seguridad de MosaicDTL
 
+## Versiones mantenidas
+
+| Versión | Estado    | Referencia                          |
+| ------- | --------- | ----------------------------------- |
+| 2.0.x   | mantenida | `main`, `production` y tag `v2.0.0` |
+| 1.0.x   | histórica | tag `v1.0.0`                        |
+
 ## Modelo de confianza
 
 La CLI procesa escenarios locales y no acepta peticiones de red. Una bóveda agrupa saldo de un propietario; las rutas pertenecen a operadores registrados; las obligaciones identifican importes comprometidos. Las entradas de identificador y los importes se validan antes de modificar el libro. El JSON de salida es una representación de estado y no debe usarse como fuente de autorización fuera del proceso que lo generó.
@@ -11,6 +18,8 @@ flowchart TB
   P --> T[Transformación del libro]
   T --> E[Evento secuencial]
   T --> A[Auditoría y medición de exposición]
+  P --> M[Cotización de margen]
+  M --> T
   E --> J[Salida JSON]
   A --> J
 ```
@@ -20,14 +29,31 @@ flowchart TB
 - La suma de saldos activos y salidas terminales debe conciliar con los depósitos, sin sumar dos veces fragmentos históricos.
 - Las transiciones de fragmentos mantienen identificadores de progenitores, generaciones y un diario ordenado.
 - Una obligación abierta se revisa frente a su saldo reservado activo.
+- La cotización de margen se calcula antes de liberar excedente; el registro de estrés por operador mueve pérdidas realizadas a un estado terminal auditable.
 - La exposición muestra capacidad, activo y holgura de cada ruta; la holgura no sustituye las verificaciones de autorización.
 - Los cálculos de suma y resta monetaria usan operaciones comprobadas cuando cambia un saldo contable.
 
 Estas propiedades son objetivos de revisión, no una certificación ni una garantía de ausencia de defectos.
 
+## Invariantes económicas
+
+```text
+depositado = libre + reservado + retirado + ejecutado + deteriorado
+importe_pendiente = obligación - ejecutado
+liberación_de_margen <= excedente_cotizado
+recibo_de_consolidación = suma de salidas por clase y obligación
+```
+
+Una revisión de cambio económico debe comparar el escenario `margin` con
+`audit.nominal_conserved`, `audit.underbacked_obligations`, los importes
+`margin_releasable` y `realized_stress`, y los eventos secuenciales. El
+operador de la ruta y el identificador de obligación forman parte de la
+trazabilidad; ningún resultado JSON sustituye las autorizaciones del sistema
+que integre el motor.
+
 ## Validación y dependencias
 
-El pipeline ejecuta `bash scripts/ci.sh` en cada push y pull request. Comprueba la sintaxis de scripts, el formato y los contratos de la CLI. Dependabot revisa las dependencias npm y GitHub Actions semanalmente. La revisión de cambios en el motor C++ debe incluir flujos nominales, límites de importe, transiciones de estado y compatibilidad del JSON.
+El pipeline ejecuta formato, sintaxis y contratos de la CLI en Ubuntu y Windows en cada push y pull request. `release-integrity` vuelve a ejecutar `bash scripts/ci.sh` desde el tag anotado y comprueba su identidad frente a `main` y `production`. Dependabot revisa las dependencias npm y GitHub Actions semanalmente. La revisión de cambios en el motor C++ debe incluir flujos nominales, límites de importe, transiciones de estado y compatibilidad del JSON.
 
 ## Comunicación de incidencias
 

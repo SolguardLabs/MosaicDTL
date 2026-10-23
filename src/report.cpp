@@ -55,6 +55,7 @@ std::string render_route(const Route& route) {
   out << "\"operator_id\":" << json_quote(route.operator_id) << ',';
   out << "\"capacity\":" << route.capacity << ',';
   out << "\"priority_floor\":" << route.priority_floor << ',';
+  out << "\"stress_bps\":" << route.stress_bps << ',';
   out << "\"state\":" << json_quote(route_state_name(route.state));
   out << '}';
   return out.str();
@@ -111,6 +112,7 @@ std::string render_receipt(const ConsolidationReceipt& receipt) {
   out << "\"economic_origin_preserved\":" << json_bool(receipt.economic_origin_preserved) << ',';
   out << "\"preserved_obligation_id\":" << json_quote(receipt.preserved_obligation_id) << ',';
   out << "\"output_fragment_id\":" << receipt.output_fragment_id << ',';
+  out << "\"output_fragment_ids\":" << json_uint_array(receipt.output_fragment_ids) << ',';
   out << "\"parents\":" << json_uint_array(receipt.parent_fragment_ids);
   out << '}';
   return out.str();
@@ -136,6 +138,7 @@ std::string render_audit(const AuditReport& audit) {
   out << "\"active_reserved\":" << audit.active_reserved << ',';
   out << "\"withdrawn\":" << audit.withdrawn << ',';
   out << "\"executed\":" << audit.executed << ',';
+  out << "\"impaired\":" << audit.impaired << ',';
   out << "\"nominal_accounted\":" << audit.nominal_accounted << ',';
   out << "\"consolidated_historical\":" << audit.consolidated_historical << ',';
   out << "\"active_fragments\":" << audit.active_fragments << ',';

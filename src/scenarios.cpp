@@ -111,6 +111,9 @@ ScenarioOutput consolidation_scenario() {
   ScenarioOutput output;
   output.name = "consolidation";
   output.ledger = base_ledger();
+  output.ledger.reserve(
+      "vault-mosaic", "route-north", "operator-north", "invoice-merge",
+      100'000, Priority::Critical);
   output.ledger.assign_free(
       "vault-mosaic",
       "route-north",
@@ -138,6 +141,37 @@ ScenarioOutput consolidation_scenario() {
       output.receipts.back().total_amount ==
       output.receipts.back().free_amount + output.receipts.back().reserved_amount;
   output.flags["origin_preserved"] = output.receipts.back().economic_origin_preserved;
+  output.flags["invoice_backed"] =
+      output.ledger.active_reserved_for_obligation("invoice-merge") == 100'000;
+  add_catalog_metrics(output);
+  return output;
+}
+
+ScenarioOutput margin_scenario() {
+  ScenarioOutput output;
+  output.name = "margin";
+  output.ledger = base_ledger();
+  output.ledger.reserve("vault-mosaic", "route-north", "operator-north",
+                        "invoice-3001", 200'000, Priority::Critical);
+  output.ledger.reserve("vault-mosaic", "route-south", "operator-south",
+                        "invoice-3001", 200'000, Priority::Critical);
+  output.ledger.post_margin("invoice-3001", "route-north", "operator-north",
+                            125'000, Priority::Critical);
+  output.ledger.post_margin("invoice-3001", "route-south", "operator-south",
+                            125'000, Priority::Critical);
+  const auto quote = output.ledger.margin_quote("invoice-3001");
+  output.metrics["margin_principal"] = quote.principal;
+  output.metrics["margin_reserved"] = quote.reserved;
+  output.metrics["modeled_stress"] = quote.modeled_stress;
+  output.metrics["margin_releasable"] = quote.releasable;
+  output.ledger.release_margin("invoice-3001", 50'000);
+  output.ledger.withdraw_free("vault-mosaic", 50'000, "treasury-alpha");
+  output.metrics["realized_stress"] =
+      output.ledger.realize_stress("invoice-3001", "operator-north");
+  output.flags["obligation_paid"] = output.ledger.execute_obligation("invoice-3001");
+  output.metrics["withdrawn"] = output.ledger.total_withdrawn();
+  output.metrics["impaired"] = output.ledger.total_impaired();
+  output.metrics["executed"] = output.ledger.total_executed();
   add_catalog_metrics(output);
   return output;
 }
@@ -175,6 +209,7 @@ std::vector<std::string> scenario_names() {
       "allocation",
       "withdrawal",
       "consolidation",
+      "margin",
       "route-close",
   };
 }
@@ -188,6 +223,9 @@ ScenarioOutput run_scenario(const std::string& name) {
   }
   if (name == "consolidation") {
     return consolidation_scenario();
+  }
+  if (name == "margin") {
+    return margin_scenario();
   }
   if (name == "route-close") {
     return route_close_scenario();

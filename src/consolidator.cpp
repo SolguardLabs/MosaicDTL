@@ -3,8 +3,10 @@
 #include "amount.hpp"
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <stdexcept>
+#include <utility>
 
 namespace mosaicdtl {
 
@@ -38,15 +40,9 @@ ConsolidationPlan build_consolidation_plan(
   plan.receipt.vault_id = vault_id;
   plan.receipt.target_route_id = target_route_id;
   plan.receipt.operator_id = operator_id;
-  plan.output.id = output_fragment_id;
-  plan.output.vault_id = vault_id;
-  plan.output.route_id = target_route_id;
-  plan.output.operator_id = operator_id;
-  plan.output.state = FragmentState::Active;
-  plan.output.priority = priority_floor;
 
   std::set<std::string> reserved_obligations;
-  std::uint64_t max_generation = 0;
+  std::map<std::string, Fragment> grouped;
 
   for (const auto& fragment : fragments) {
     if (!fragment.active()) {
@@ -62,52 +58,60 @@ ConsolidationPlan build_consolidation_plan(
       continue;
     }
 
-    plan.output.amount = checked_add(plan.output.amount, fragment.amount, "consolidation.total");
-    plan.output.priority = stronger_priority(plan.output.priority, fragment.priority);
-    max_generation = std::max(max_generation, fragment.generation);
-    plan.output.parent_ids.push_back(fragment.id);
+    const bool reserved = fragment.kind == FragmentKind::Reserved;
+    if (reserved && fragment.obligation_id.empty()) {
+      throw std::runtime_error("reserved fragment lacks obligation");
+    }
+    const std::string key = reserved ? "reserved:" + fragment.obligation_id : "free";
+    auto& output = grouped[key];
+    if (output.vault_id.empty()) {
+      output.vault_id = vault_id;
+      output.route_id = target_route_id;
+      output.operator_id = operator_id;
+      output.state = FragmentState::Active;
+      output.priority = priority_floor;
+      output.kind = reserved ? FragmentKind::Reserved : FragmentKind::Free;
+      output.obligation_id = reserved ? fragment.obligation_id : "";
+    }
+    output.amount = checked_add(output.amount, fragment.amount, "consolidation.total");
+    output.priority = stronger_priority(output.priority, fragment.priority);
+    output.generation = std::max(output.generation, fragment.generation + 1);
+    output.parent_ids.push_back(fragment.id);
     plan.receipt.parent_fragment_ids.push_back(fragment.id);
 
-    if (fragment.kind == FragmentKind::Reserved) {
+    if (reserved) {
       plan.receipt.reserved_amount =
           checked_add(plan.receipt.reserved_amount, fragment.amount, "consolidation.reserved");
-      if (!fragment.obligation_id.empty()) {
-        reserved_obligations.insert(fragment.obligation_id);
-      }
+      reserved_obligations.insert(fragment.obligation_id);
     } else {
       plan.receipt.free_amount =
           checked_add(plan.receipt.free_amount, fragment.amount, "consolidation.free");
     }
   }
 
-  if (plan.output.amount == 0) {
+  if (grouped.empty()) {
     throw std::runtime_error("no active fragments selected for consolidation");
   }
 
   plan.receipt.total_amount =
       checked_add(plan.receipt.free_amount, plan.receipt.reserved_amount, "consolidation.check");
-  if (plan.receipt.total_amount != plan.output.amount) {
-    throw std::runtime_error("consolidation total mismatch");
-  }
-
   plan.receipt.mixed_reserved_and_free =
       plan.receipt.free_amount > 0 && plan.receipt.reserved_amount > 0;
-
-  const bool one_reserved_origin =
-      plan.receipt.free_amount == 0 && reserved_obligations.size() == 1;
-
-  if (one_reserved_origin) {
-    plan.output.kind = FragmentKind::Reserved;
-    plan.output.obligation_id = *reserved_obligations.begin();
-    plan.receipt.preserved_obligation_id = plan.output.obligation_id;
-  } else {
-    plan.output.kind = FragmentKind::Free;
-    plan.output.obligation_id.clear();
+  if (plan.receipt.free_amount == 0 && reserved_obligations.size() == 1) {
+    plan.receipt.preserved_obligation_id = *reserved_obligations.begin();
   }
-
-  plan.output.generation = max_generation + 1;
-  plan.receipt.economic_origin_preserved =
-      plan.receipt.reserved_amount == 0 || one_reserved_origin;
+  Amount output_total = 0;
+  for (auto& [_, output] : grouped) {
+    output.id = output_fragment_id + plan.outputs.size();
+    output_total = checked_add(output_total, output.amount, "consolidation.outputs");
+    plan.receipt.output_fragment_ids.push_back(output.id);
+    plan.outputs.push_back(std::move(output));
+  }
+  if (output_total != plan.receipt.total_amount) {
+    throw std::runtime_error("consolidation total mismatch");
+  }
+  plan.receipt.output_fragment_id = plan.receipt.output_fragment_ids.front();
+  plan.receipt.economic_origin_preserved = true;
   return plan;
 }
 

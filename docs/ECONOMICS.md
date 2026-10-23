@@ -3,12 +3,46 @@
 Los importes se contabilizan en unidades mínimas enteras. Se distinguen saldo libre, saldo reservado para obligaciones, retiradas y ejecuciones. Un fragmento histórico consolidado demuestra procedencia, pero no añade saldo disponible.
 
 ```text
-D = F + R + W + E
+D = F + R + W + E + I
 H(r) = max(0, C(r) - A(r))
 A(r) = F(r) + R(r)
 ```
 
-`D` es el total depositado; `F` y `R`, los saldos activos libre y reservado; `W` y `E`, salidas terminales. `C(r)` es la capacidad declarada de la ruta, `A(r)` su saldo activo y `H(r)` su holgura observada. Si `A(r) > C(r)`, la vista registra holgura cero y `within_capacity = false`. No se permite que una resta sin signo represente una holgura negativa.
+`D` es el total depositado; `F` y `R`, los saldos activos libre y reservado; `W`, `E` e `I`, retiradas, ejecuciones y pérdidas realizadas terminales. `C(r)` es la capacidad declarada de la ruta, `A(r)` su saldo activo y `H(r)` su holgura observada. Si `A(r) > C(r)`, la vista registra holgura cero y `within_capacity = false`. No se permite que una resta sin signo represente una holgura negativa.
+
+## Margen de una obligación
+
+Una obligación puede distribuir su principal reservado entre varias rutas y
+añadir margen sin aumentar el importe del pago prometido. Para cada ruta se
+calcula una pérdida de estrés entera. La cotización agrega los cuadrados,
+redondea la raíz hacia arriba y exige principal más estrés modelado:
+
+```text
+loss[r] = floor(reserved[r] * stressBps[r] / 10_000)
+modeledStress = ceil(sqrt(sum(loss[r]^2)))
+minimumReserve = principalPending + modeledStress
+releasable = max(0, reservedTotal - minimumReserve)
+```
+
+El escenario `margin` reserva 200.000 unidades de principal en cada una de
+dos rutas y añade 125.000 de margen a cada ruta. Con `stressBps = 3.000`,
+ambas rutas muestran 97.500 de pérdida cotizada; la raíz de su suma de
+cuadrados se redondea a 137.886. La reserva total de 650.000 y el principal
+de 400.000 dejan un excedente cotizado de 112.114. El escenario libera 50.000,
+realiza 82.500 de pérdida en una ruta y paga las 400.000 unidades de la
+obligación. El informe conserva el deterioro como salida terminal y concilia
+el depósito inicial completo.
+
+```mermaid
+flowchart LR
+  R["Reserva por ruta"] --> L["Shock en bps"]
+  L --> Q["Agregación cuadrática"]
+  Q --> M["Reserva mínima"]
+  M --> X["Excedente cotizado"]
+  X --> F["Liberación a liquidez libre"]
+  L --> I["Pérdida realizada por operador"]
+  I --> A["Auditoría y pago pendiente"]
+```
 
 ## Ejemplo reproducible
 

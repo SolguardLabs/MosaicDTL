@@ -24,6 +24,15 @@ function findWindowsClang() {
   roots.push(process.env.ProgramFiles || "");
   roots.push(process.env["ProgramFiles(x86)"] || "");
   const candidates = [];
+  const direct = [
+    join(process.env.ProgramFiles || "C:\\Program Files", "LLVM", "bin", "clang++.exe"),
+    "C:\\msys64\\mingw64\\bin\\g++.exe",
+  ];
+  for (const candidate of direct) {
+    if (existsSync(candidate)) {
+      candidates.push(candidate);
+    }
+  }
   for (const base of roots) {
     if (!base || !existsSync(base)) {
       continue;

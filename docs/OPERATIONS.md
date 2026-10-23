@@ -23,7 +23,17 @@ flowchart LR
   M --> P[Rama production y tag]
 ```
 
-Antes de publicar un cambio económico, compare el comportamiento de depósitos, reservas, asignaciones, consolidaciones, retiradas y cierres de ruta. Revise los recibos junto al historial de fragmentos y compruebe que los consumidores JSON aceptan campos nuevos. Un cambio de formato o semántica que rompa consumidores exige versión mayor.
+Antes de publicar un cambio económico, compare el comportamiento de depósitos, reservas, margen, pérdidas realizadas, asignaciones, consolidaciones, retiradas y cierres de ruta. Revise los recibos junto al historial de fragmentos y compruebe que los consumidores JSON aceptan campos nuevos. Un cambio de formato o semántica que rompa consumidores exige versión mayor.
+
+## Conciliación de margen
+
+1. Lea `principal`, `reserved`, `modeled_stress` y `releasable` antes de liberar.
+2. Confirme que la ruta y el operador son los configurados para el compromiso.
+3. Registre el importe liberado y su posterior retirada como eventos distintos.
+4. Tras un evento de estrés, compare `impaired`, reserva activa y pago pendiente.
+5. Si la obligación queda sin respaldo, detenga la ejecución, conserve el
+   estado del libro y eleve el caso al responsable de riesgo; no ajuste saldos
+   manualmente para silenciar la auditoría.
 
 El flujo `release-integrity` vuelve a ejecutar CI cuando se publica el tag y el release. También exige que `main`, `production` y el tag anotado resuelvan al mismo commit.
 
@@ -32,4 +42,5 @@ El flujo `release-integrity` vuelve a ejecutar CI cuando se publica el tag y el 
 - Si falla la compilación, verifique `CXX`, la versión C++17 y la salida del compilador; no confunda un error de toolchain con un fallo contable.
 - Si una ruta no puede cerrarse, consulte el activo por ruta y los fragmentos en estado `Active` antes de repetir la operación.
 - Si una obligación no se ejecuta, contraste importe pendiente, saldo reservado activo y eventos `execution_blocked`.
+- Si una cotización de margen no deja excedente, revise principal pendiente, shock en bps y exposición por ruta antes de proponer una reconfiguración.
 - Si una suma nominal no concilia, excluya los fragmentos históricos marcados como consolidados y confirme la escala entera del activo.

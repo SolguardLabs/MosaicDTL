@@ -25,6 +25,7 @@ enum class FragmentState {
   Consolidated,
   Withdrawn,
   Executed,
+  Impaired,
   Closed,
 };
 
@@ -74,6 +75,7 @@ struct Route {
   std::string operator_id;
   Amount capacity = 0;
   Amount priority_floor = 0;
+  std::uint32_t stress_bps = 3'000;
   RouteState state = RouteState::Open;
 };
 

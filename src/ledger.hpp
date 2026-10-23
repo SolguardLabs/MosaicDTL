@@ -2,10 +2,12 @@
 
 #include "consolidator.hpp"
 #include "events.hpp"
+#include "margin.hpp"
 #include "types.hpp"
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -15,7 +17,8 @@ class Ledger {
  public:
   void register_vault(std::string id, std::string owner);
   void register_operator(std::string id, Amount max_route_capacity, std::uint32_t max_open_fragments);
-  void register_route(std::string id, std::string operator_id, Amount capacity, Priority floor);
+  void register_route(std::string id, std::string operator_id, Amount capacity, Priority floor,
+                      std::uint32_t stress_bps = 3'000);
 
   std::uint64_t deposit(const std::string& vault_id, Amount amount, const std::string& memo);
   std::vector<std::uint64_t> assign_free(
@@ -36,6 +39,13 @@ class Ledger {
       const std::string& vault_id,
       Amount amount,
       const std::string& beneficiary);
+  std::vector<std::uint64_t> post_margin(const std::string& obligation_id,
+                                         const std::string& route_id,
+                                         const std::string& operator_id,
+                                         Amount amount, Priority priority);
+  MarginQuote margin_quote(const std::string& obligation_id) const;
+  std::vector<std::uint64_t> release_margin(const std::string& obligation_id, Amount amount);
+  Amount realize_stress(const std::string& obligation_id, const std::string& operator_id);
   bool execute_obligation(const std::string& obligation_id);
   ConsolidationReceipt consolidate(
       const std::string& vault_id,
@@ -50,6 +60,7 @@ class Ledger {
   Amount total_active_reserved() const;
   Amount total_withdrawn() const;
   Amount total_executed() const;
+  Amount total_impaired() const;
   Amount active_amount_on_route(const std::string& route_id) const;
   Amount active_reserved_for_obligation(const std::string& obligation_id) const;
   std::uint64_t open_fragment_count() const;
@@ -86,6 +97,7 @@ class Ledger {
   std::map<std::string, Route> routes_;
   std::map<std::string, OperatorProfile> operators_;
   std::map<std::string, Obligation> obligations_;
+  std::set<std::pair<std::string, std::string>> stress_realized_;
   std::vector<Fragment> fragments_;
   EventLog events_;
   std::uint64_t next_fragment_id_ = 1;
