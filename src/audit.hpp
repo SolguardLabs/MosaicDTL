@@ -21,6 +21,7 @@ struct AuditReport {
   Amount active_reserved = 0;
   Amount withdrawn = 0;
   Amount executed = 0;
+  Amount impaired = 0;
   Amount nominal_accounted = 0;
   Amount consolidated_historical = 0;
   std::uint64_t active_fragments = 0;

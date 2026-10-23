@@ -52,6 +52,8 @@ std::string fragment_state_name(FragmentState state) {
       return "withdrawn";
     case FragmentState::Executed:
       return "executed";
+    case FragmentState::Impaired:
+      return "impaired";
     case FragmentState::Closed:
       return "closed";
   }

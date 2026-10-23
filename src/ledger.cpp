@@ -37,7 +37,8 @@ void Ledger::register_operator(
   events_.append(EventKind::OperatorRegistered, profile.id, "operator registered", max_route_capacity);
 }
 
-void Ledger::register_route(std::string id, std::string operator_id, Amount capacity, Priority floor) {
+void Ledger::register_route(std::string id, std::string operator_id, Amount capacity, Priority floor,
+                            std::uint32_t stress_bps) {
   require_identifier(id, "route_id");
   require_operator_active(operator_id);
   if (routes_.count(id) != 0) {
@@ -47,11 +48,15 @@ void Ledger::register_route(std::string id, std::string operator_id, Amount capa
   if (capacity > profile.max_route_capacity) {
     throw std::invalid_argument("route capacity exceeds operator policy");
   }
+  if (stress_bps > 10'000) {
+    throw std::invalid_argument("route stress above 10000 bps");
+  }
   Route route;
   route.id = std::move(id);
   route.operator_id = std::move(operator_id);
   route.capacity = capacity;
   route.priority_floor = static_cast<Amount>(floor);
+  route.stress_bps = stress_bps;
   routes_.emplace(route.id, route);
   events_.append(EventKind::RouteRegistered, route.id, "route registered", capacity);
 }
@@ -109,6 +114,9 @@ std::vector<std::uint64_t> Ledger::reserve(
   require_vault(vault_id);
   require_route_open(route_id);
   require_operator_active(operator_id);
+  if (routes_.at(route_id).operator_id != operator_id) {
+    throw std::invalid_argument("route operator mismatch");
+  }
   if (amount == 0) {
     throw std::invalid_argument("reservation amount is zero");
   }
@@ -120,8 +128,8 @@ std::vector<std::uint64_t> Ledger::reserve(
     obligation.route_id = route_id;
     obligation.operator_id = operator_id;
   }
-  if (obligation.vault_id != vault_id || obligation.route_id != route_id) {
-    throw std::invalid_argument("obligation terms cannot be changed");
+  if (obligation.vault_id != vault_id) {
+    throw std::invalid_argument("obligation vault cannot be changed");
   }
   obligation.amount = checked_add(obligation.amount, amount, "obligation.amount");
 
@@ -136,6 +144,138 @@ std::vector<std::uint64_t> Ledger::reserve(
   auto ids = consume_free(vault_id, amount, target);
   events_.append(EventKind::Reservation, obligation_id, "reserved for obligation", amount);
   return ids;
+}
+
+std::vector<std::uint64_t> Ledger::post_margin(
+    const std::string& obligation_id, const std::string& route_id,
+    const std::string& operator_id, Amount amount, Priority priority) {
+  const auto found = obligations_.find(obligation_id);
+  if (found == obligations_.end() || found->second.cancelled ||
+      found->second.executed >= found->second.amount) {
+    throw std::invalid_argument("obligation not open for margin");
+  }
+  require_route_open(route_id);
+  require_operator_active(operator_id);
+  if (routes_.at(route_id).operator_id != operator_id) {
+    throw std::invalid_argument("route operator mismatch");
+  }
+  TransformTarget target;
+  target.kind = FragmentKind::Reserved;
+  target.state = FragmentState::Active;
+  target.route_id = route_id;
+  target.operator_id = operator_id;
+  target.obligation_id = obligation_id;
+  target.priority = priority;
+  target.memo = "posted margin";
+  auto ids = consume_free(found->second.vault_id, amount, target);
+  events_.append(EventKind::MarginPosted, obligation_id, "margin posted", amount);
+  return ids;
+}
+
+MarginQuote Ledger::margin_quote(const std::string& obligation_id) const {
+  const auto found = obligations_.find(obligation_id);
+  if (found == obligations_.end() || found->second.cancelled ||
+      found->second.executed >= found->second.amount) {
+    throw std::invalid_argument("obligation not open for margin quote");
+  }
+  std::map<std::string, Amount> route_amounts;
+  for (const auto& fragment : fragments_) {
+    if (fragment.reserved() && fragment.obligation_id == obligation_id) {
+      route_amounts[fragment.route_id] = checked_add(
+          route_amounts[fragment.route_id], fragment.amount, "margin.route_amount");
+    }
+  }
+  std::vector<MarginExposure> exposures;
+  for (const auto& [route_id, amount] : route_amounts) {
+    const auto& route = routes_.at(route_id);
+    exposures.push_back({route_id, route.operator_id, amount, route.stress_bps});
+  }
+  const Amount principal = checked_sub(
+      found->second.amount, found->second.executed, "margin.principal");
+  return estimate_margin(principal, exposures);
+}
+
+std::vector<std::uint64_t> Ledger::release_margin(
+    const std::string& obligation_id, Amount amount) {
+  if (amount == 0) {
+    throw std::invalid_argument("margin release amount is zero");
+  }
+  const auto quote = margin_quote(obligation_id);
+  if (amount > quote.releasable) {
+    throw std::runtime_error("margin release exceeds route budget");
+  }
+  Amount remaining = amount;
+  std::vector<Fragment> released;
+  for (auto& fragment : fragments_) {
+    if (remaining == 0) {
+      break;
+    }
+    if (!fragment.reserved() || fragment.obligation_id != obligation_id) {
+      continue;
+    }
+    const Amount take = min_amount(fragment.amount, remaining);
+    fragment.amount = checked_sub(fragment.amount, take, "margin.fragment");
+    if (fragment.amount == 0) {
+      fragment.state = FragmentState::Closed;
+    }
+    Fragment child = fragment;
+    child.id = 0;
+    child.amount = take;
+    child.kind = FragmentKind::Free;
+    child.state = FragmentState::Active;
+    child.obligation_id.clear();
+    child.parent_ids = {fragment.id};
+    released.push_back(std::move(child));
+    remaining = checked_sub(remaining, take, "margin.remaining");
+  }
+  std::vector<std::uint64_t> ids;
+  for (auto& child : released) {
+    ids.push_back(append_fragment(std::move(child)));
+  }
+  events_.append(EventKind::MarginReleased, obligation_id, "margin released", amount);
+  return ids;
+}
+
+Amount Ledger::realize_stress(const std::string& obligation_id, const std::string& operator_id) {
+  require_operator_active(operator_id);
+  const auto key = std::make_pair(obligation_id, operator_id);
+  if (stress_realized_.count(key) != 0) {
+    throw std::runtime_error("stress already realized");
+  }
+  const auto found = obligations_.find(obligation_id);
+  if (found == obligations_.end() || found->second.cancelled ||
+      found->second.executed >= found->second.amount) {
+    throw std::invalid_argument("obligation not open for stress");
+  }
+  Amount total_loss = 0;
+  std::vector<Fragment> impairments;
+  for (auto& fragment : fragments_) {
+    if (!fragment.reserved() || fragment.obligation_id != obligation_id ||
+        fragment.operator_id != operator_id) {
+      continue;
+    }
+    const Amount loss = apply_bps(fragment.amount, routes_.at(fragment.route_id).stress_bps);
+    if (loss == 0) {
+      continue;
+    }
+    fragment.amount = checked_sub(fragment.amount, loss, "stress.fragment");
+    if (fragment.amount == 0) {
+      fragment.state = FragmentState::Closed;
+    }
+    Fragment child = fragment;
+    child.id = 0;
+    child.amount = loss;
+    child.state = FragmentState::Impaired;
+    child.parent_ids = {fragment.id};
+    impairments.push_back(std::move(child));
+    total_loss = checked_add(total_loss, loss, "stress.loss");
+  }
+  for (auto& child : impairments) {
+    append_fragment(std::move(child));
+  }
+  stress_realized_.insert(key);
+  events_.append(EventKind::StressRealized, obligation_id, "route stress realized", total_loss);
+  return total_loss;
 }
 
 std::vector<std::uint64_t> Ledger::withdraw_free(
@@ -217,8 +357,8 @@ ConsolidationReceipt Ledger::consolidate(
     require_route_open(route_id);
   }
 
-  const auto receipt_id = next_consolidation_id_++;
-  const auto output_id = next_fragment_id_++;
+  const auto receipt_id = next_consolidation_id_;
+  const auto output_id = next_fragment_id_;
   auto plan = build_consolidation_plan(
       receipt_id,
       output_id,
@@ -229,6 +369,9 @@ ConsolidationReceipt Ledger::consolidate(
       operator_id,
       priority_floor);
 
+  next_consolidation_id_ += 1;
+  next_fragment_id_ += plan.outputs.size();
+
   for (const auto parent_id : plan.receipt.parent_fragment_ids) {
     auto* fragment = find_fragment(parent_id);
     if (fragment == nullptr || !fragment->active()) {
@@ -237,8 +380,9 @@ ConsolidationReceipt Ledger::consolidate(
     fragment->state = FragmentState::Consolidated;
   }
 
-  fragments_.push_back(plan.output);
-  plan.receipt.output_fragment_id = output_id;
+  for (auto& output : plan.outputs) {
+    fragments_.push_back(std::move(output));
+  }
   events_.append(EventKind::Consolidation, target_route_id, "fragments consolidated", plan.receipt.total_amount);
   return plan.receipt;
 }
@@ -299,6 +443,16 @@ Amount Ledger::total_executed() const {
   for (const auto& fragment : fragments_) {
     if (fragment.state == FragmentState::Executed) {
       total = checked_add(total, fragment.amount, "total.executed");
+    }
+  }
+  return total;
+}
+
+Amount Ledger::total_impaired() const {
+  Amount total = 0;
+  for (const auto& fragment : fragments_) {
+    if (fragment.state == FragmentState::Impaired) {
+      total = checked_add(total, fragment.amount, "total.impaired");
     }
   }
   return total;

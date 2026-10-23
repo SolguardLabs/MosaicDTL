@@ -9,16 +9,23 @@ La CLI es un proceso local. `mosaicdtl list` devuelve `protocol` y la lista de e
 
 ## Contrato de salida
 
-| Campo                           | Significado                                                |
-| ------------------------------- | ---------------------------------------------------------- |
-| `metrics`                       | Importes y contadores específicos del escenario.           |
-| `flags`                         | Comprobaciones booleanas observables.                      |
-| `vaults`, `routes`, `operators` | Entidades registradas y sus parámetros.                    |
-| `obligations`                   | Importe, ejecutado y estado de cada compromiso.            |
-| `fragments`                     | Piezas activas y terminales, con `generation` y `parents`. |
-| `receipts`                      | Trazabilidad de la transformación entre fragmentos.        |
-| `events`                        | Secuencia de cambios para reproducir la operación.         |
-| `audit`                         | Conciliación nominal y estado de obligaciones abiertas.    |
+| Campo                            | Significado                                                       |
+| -------------------------------- | ----------------------------------------------------------------- |
+| `metrics`                        | Importes y contadores específicos del escenario.                  |
+| `flags`                          | Comprobaciones booleanas observables.                             |
+| `vaults`, `routes`, `operators`  | Entidades registradas y sus parámetros.                           |
+| `obligations`                    | Importe, ejecutado y estado de cada compromiso.                   |
+| `fragments`                      | Piezas activas y terminales, con `generation` y `parents`.        |
+| `receipts`                       | Trazabilidad de la transformación entre fragmentos.               |
+| `receipts[].output_fragment_ids` | Identificadores de cada salida preservada por clase y obligación. |
+| `events`                         | Secuencia de cambios para reproducir la operación.                |
+| `audit`                          | Conciliación nominal y estado de obligaciones abiertas.           |
+
+El escenario `margin` incluye `margin_principal`, `margin_reserved`,
+`modeled_stress`, `margin_releasable`, `realized_stress` e `impaired` en
+`metrics`. El campo `audit.impaired` se suma como salida terminal en la
+conciliación nominal. Los integradores deben distinguir el excedente cotizado
+del importe efectivamente liberado y la pérdida realizada de una previsión.
 
 Los importes JSON son enteros sin signo. JavaScript representa exactamente los enteros hasta `Number.MAX_SAFE_INTEGER`; un consumidor que admita importes mayores debe validar el rango antes de convertirlos a `number` o usar un decodificador que conserve precisión entera. El motor no realiza conversiones monetarias: el integrador define el activo y la escala.
 

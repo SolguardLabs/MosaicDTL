@@ -19,11 +19,12 @@ struct ConsolidationReceipt {
   bool economic_origin_preserved = true;
   std::string preserved_obligation_id;
   std::uint64_t output_fragment_id = 0;
+  std::vector<std::uint64_t> output_fragment_ids;
   std::vector<std::uint64_t> parent_fragment_ids;
 };
 
 struct ConsolidationPlan {
-  Fragment output;
+  std::vector<Fragment> outputs;
   ConsolidationReceipt receipt;
 };
 

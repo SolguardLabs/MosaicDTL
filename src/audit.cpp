@@ -11,6 +11,7 @@ AuditReport audit_ledger(const Ledger& ledger) {
   report.active_reserved = ledger.total_active_reserved();
   report.withdrawn = ledger.total_withdrawn();
   report.executed = ledger.total_executed();
+  report.impaired = ledger.total_impaired();
   report.active_fragments = ledger.open_fragment_count();
 
   for (const auto& fragment : ledger.fragments()) {
@@ -23,6 +24,7 @@ AuditReport audit_ledger(const Ledger& ledger) {
   report.nominal_accounted = checked_add(report.active_free, report.active_reserved, "audit.nominal.1");
   report.nominal_accounted = checked_add(report.nominal_accounted, report.withdrawn, "audit.nominal.2");
   report.nominal_accounted = checked_add(report.nominal_accounted, report.executed, "audit.nominal.3");
+  report.nominal_accounted = checked_add(report.nominal_accounted, report.impaired, "audit.nominal.4");
   report.nominal_conserved = report.nominal_accounted == report.deposited;
 
   for (const auto& [_, obligation] : ledger.obligations()) {

@@ -36,6 +36,12 @@ std::string event_kind_name(EventKind kind) {
       return "allocation";
     case EventKind::Reservation:
       return "reservation";
+    case EventKind::MarginPosted:
+      return "margin_posted";
+    case EventKind::MarginReleased:
+      return "margin_released";
+    case EventKind::StressRealized:
+      return "stress_realized";
     case EventKind::Withdrawal:
       return "withdrawal";
     case EventKind::Consolidation:

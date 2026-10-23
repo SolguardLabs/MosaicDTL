@@ -24,7 +24,10 @@ Amount apply_bps(Amount amount, std::uint32_t bps) {
   if (bps > 10'000) {
     throw std::invalid_argument("bps above 10000");
   }
-  return (amount * bps) / 10'000;
+  const Amount whole = checked_add((amount / 10'000) * bps,
+                                   ((amount % 10'000) * bps) / 10'000,
+                                   "amount.apply_bps");
+  return whole;
 }
 
 Amount ceil_div(Amount lhs, Amount rhs) {

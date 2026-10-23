@@ -2,7 +2,7 @@
 
 ![MosaicDTL — Solguard Labs](assets/banner.png)
 
-MosaicDTL es un motor de contabilidad de liquidez fragmentada para coordinar bóvedas, rutas operativas y obligaciones de pago. Cada transformación deja un fragmento descendiente y un evento ordenado; el estado se puede reconstruir sin una base de datos ni servicios de red. La distribución `1.0.0` ofrece una CLI determinista y un contrato JSON para integraciones y revisión financiera.
+MosaicDTL es un motor de contabilidad de liquidez fragmentada para coordinar bóvedas, rutas operativas y obligaciones de pago. Cada transformación deja fragmentos descendientes y eventos ordenados; el estado se reconstruye sin depender de una base de datos externa. **Production 2.0.0** añade margen por obligación, liberación de excedente y registro de pérdidas de estrés. La CLI determinista expone un contrato JSON para integraciones y revisión financiera.
 
 ## Arquitectura
 
@@ -13,6 +13,9 @@ flowchart LR
   F --> R[Reserva para obligación]
   A --> C[Consolidación]
   R --> C
+  R --> M[Margen y riesgo por ruta]
+  M --> W
+  M --> E
   F --> W[Retirada]
   R --> E[Ejecución de obligación]
   C --> L[Libro de fragmentos y eventos]
@@ -27,6 +30,7 @@ flowchart LR
 | `ConsolidationPlan` | Selección de fragmentos y emisión de un recibo trazable.               |
 | `AuditReport`       | Reconciliación de depósitos, salidas y obligaciones abiertas.          |
 | `ExposureBook`      | Capacidad, liquidez comprometida y holgura por ruta.                   |
+| `MarginQuote`       | Principal, estrés cuadrático, reserva mínima y excedente cotizado.     |
 | CLI y JSON          | Escenarios reproducibles para consumidores sin dependencias de red.    |
 
 ## Modelo económico
@@ -34,11 +38,14 @@ flowchart LR
 Los importes son enteros en la unidad mínima definida por la integración. No hay conversión implícita de divisas ni decimales de coma flotante. Para una bóveda, la reconciliación nominal es:
 
 ```text
-depositado = libre_activo + reservado_activo + retirado + ejecutado
+depositado = libre_activo + reservado_activo + retirado + ejecutado + deteriorado
 holgura_ruta = max(0, capacidad_ruta - activo_en_ruta)
+perdida_ruta = floor(reservado_ruta * stressBps_ruta / 10_000)
+estres_modelado = ceil(sqrt(sum(perdida_ruta²)))
+reserva_minima = principal_pendiente + estres_modelado
 ```
 
-El primer balance cuenta estados actuales, no fragmentos históricos ya consolidados. La holgura es una métrica de exposición para planificación y no una autorización de operación. La auditoría también compara obligaciones abiertas con el respaldo activo asociado. Consulte el [modelo económico](docs/ECONOMICS.md) para un ejemplo numérico.
+El primer balance cuenta estados actuales, no fragmentos históricos ya consolidados. Una consolidación mixta conserva salidas separadas por obligación y liquidez libre. La liberación de margen usa la reserva mínima cotizada; las pérdidas realizadas se registran como fragmentos terminales `impaired`. La holgura de ruta es una vista de planificación, no una autorización de retirada. Consulte el [modelo económico](docs/ECONOMICS.md) para un ejemplo numérico.
 
 ## Inicio rápido
 
@@ -49,6 +56,7 @@ npm install
 npm run build
 ./build/mosaicdtl list
 ./build/mosaicdtl scenario allocation
+./build/mosaicdtl scenario margin
 npm test
 bash scripts/ci.sh
 ```
@@ -79,6 +87,6 @@ Los campos mostrados son un extracto del documento completo, no una respuesta in
 
 `npm test` compila la CLI y ejecuta contratos TypeScript sobre sus salidas. El flujo de CI añade comprobación sintáctica y formato de los artefactos de texto. Los escenarios son deterministas para una misma versión; los consumidores deben ignorar campos JSON adicionales que aparezcan en versiones compatibles.
 
-La rama `production` y el tag `v1.0.0` identifican el mismo código de esta entrega. Se trata de un motor local de referencia; cualquier integración con custodia, redes o activos externos requiere revisión y controles propios.
+La rama `production` y el tag anotado `v2.0.0` identifican el mismo commit de esta entrega. El motor no custodia por sí mismo tokens ni envía transacciones; una integración con un custodio o red debe implementar autorización, conciliación física y límites de operación propios.
 
 Documentación: [arquitectura](docs/ARCHITECTURE.md), [modelo económico](docs/ECONOMICS.md), [operación](docs/OPERATIONS.md), [integración](docs/INTEGRATION.md) y [política de seguridad](SECURITY.md).
